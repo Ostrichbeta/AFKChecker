@@ -3,11 +3,15 @@ import com.jeder.afkChecker.extra.RamdomString;
 import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.event.player.*;
 
 import java.util.*;
 
@@ -39,6 +43,8 @@ public class Main extends JavaPlugin implements Listener {
         saveConfig() ; //保存配置
         sendCAPTCHA sendCAPTCHA = new sendCAPTCHA( this ) ;
         sendCAPTCHA.runTaskLater( this , (long)(getConfig().getInt( "checkPeriod" ) ) * 20 ) ; //設定檢查週期
+        checkCAPTCHA checkCAPTCHA = new checkCAPTCHA( this ) ;
+        checkCAPTCHA.runTaskLater( this , 20L ) ; //建立連個新的Thread
 
     }
 
@@ -102,5 +108,79 @@ public class Main extends JavaPlugin implements Listener {
         }
     }
 
+    @EventHandler
+    void playerQuit (PlayerQuitEvent e ) {
+        //當玩家離開時進行檢測
+        Player player = e.getPlayer() ;
+        String name = player.getName() ;
+        boolean exist = isNeedCaptcha.containsKey( name ) ;
+        if ( exist ) {
+            isNeedCaptcha.remove(name);
+            wrongTime.remove(name);
+            //當玩家離開遊戲時刪除他們的HashMap
+        }
+    }
+
+    @EventHandler
+    void playerChat ( PlayerChatEvent e ) {
+        Player player = e.getPlayer() ;
+        String name = player.getName() ;
+        boolean needCaptcha = isNeedCaptcha.containsKey( name ) ;
+        if ( needCaptcha ) {
+            e.setCancelled( true );
+            String message = e.getMessage() ;
+            if ( message.equals( captcha ) ) {
+                //驗證碼符合要求
+                player.sendMessage( ChatColor.YELLOW + "[JCF掛機判定] " + ChatColor.GREEN + "恭喜您聽過了我們的掛機判定！" );
+            }
+            else
+            {
+                //驗證碼不符合要求
+                Integer wrTime = wrongTime.get( name ) ;
+                if ( wrTime < getConfig().getInt( "maxWrongTime" ) ) {
+                    wrTime += 1 ;
+                    wrongTime.put( name , wrTime ) ;
+                    player.sendMessage( ChatColor.YELLOW + "[JCF掛機判定] " + ChatColor.GREEN + "您已經輸錯了 " + wrTime + " 次驗證碼，如果您連續輸錯 " + getConfig().getInt( "maxWrongTime" ) + " 次驗證碼，您將會被移出伺服器。" );
+                }
+                if ( wrTime >= getConfig().getInt( "maxWrongTime" ) ) {
+                    //玩家輸入錯誤次數已經達到上限
+                    isNeedCaptcha.remove( name ) ;
+                    wrongTime.remove( name ) ;
+                    player.kickPlayer( ChatColor.YELLOW + "[JCF掛機判定] " + ChatColor.GREEN + "您已經輸錯了 " + wrTime + " 次驗證碼，達到了錯誤的上限，已經被移出伺服器。" );
+                }
+            }
+        }
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase( "AFKChecker" )) {
+            if ( args[1].equalsIgnoreCase( "trigger" ) ){
+                //通過手動的方式觸發一個驗證
+                if ( !sender.isOp() ){
+                    sender.sendMessage( ChatColor.YELLOW + "[JCF掛機判定] " + ChatColor.GREEN + "僅有這個伺服器的管理員可以執行這個指令。" );
+                    return true ;
+                }
+                else {
+                    new sendCAPTCHA( this ).run() ;
+                    getLogger().info( "成功手動觸發了一次驗證。" );
+                }
+                return true ;
+            }
+            if ( args[1].equalsIgnoreCase( "reload" ) ) {
+                //重載插件
+                if ( !sender.isOp() ){
+                    sender.sendMessage( ChatColor.YELLOW + "[JCF掛機判定] " + ChatColor.GREEN + "僅有這個伺服器的管理員可以執行這個指令。" );
+                    return true ;
+                }
+                else {
+                    reloadConfig();
+                    getLogger().info( "成功重載插件。" );
+                }
+            }
+            return false ;
+        }
+        return true;
+    }
 }
 
