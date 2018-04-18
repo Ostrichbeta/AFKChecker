@@ -37,6 +37,8 @@ public class Main extends JavaPlugin implements Listener {
         fc.addDefault( "captchaMode" , 0 ); //設定生成的驗證碼的樣式，設定為0是英文和數字混合，設定為1為免混淆模式（不包含0,1,I,l,O,o,q），設定為2則是純數字（強烈不建議此選項）
         getConfig().options().copyDefaults( true ) ;
         saveConfig() ; //保存配置
+        sendCAPTCHA sendCAPTCHA = new sendCAPTCHA( this ) ;
+        sendCAPTCHA.runTaskLater( this , (long)(getConfig().getInt( "checkPeriod" ) ) * 20 ) ; //設定檢查週期
 
     }
 
